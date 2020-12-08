@@ -1,0 +1,441 @@
+import uk.ac.warwick.dcs.maze.logic.IRobot;
+
+public class Ex3 {
+
+  private int pollRun = 0;
+  private RobotData3 robotData;
+
+  private int explorerMode = 1;
+  //1 if exploring, 0 if backtracking
+
+  public void controlRobot(IRobot robot) {
+    //check if this is the first run of maze
+    if ((robot.getRuns() == 0) && (pollRun == 0)){
+      robotData = new RobotData3();
+      explorerMode = 1;
+    }
+    pollRun++;
+    if (explorerMode == 1) {
+      exploreControl(robot);
+    } else {
+      backtrackControl(robot);
+    }
+  }
+  public void exploreControl(IRobot robot) {
+    byte exits = nonwallExits(robot);
+    int direction;
+    if (exits < 2){
+      explorerMode = 0;
+      direction = deadend(robot);
+      //backtrack if at deadend
+
+    } else if (exits == 2){
+      direction = corridor(robot);
+    } else {
+      //if at junction store the location of junction and heading of robot
+      robotData.recordJunction(robot.getLocation().x, robot.getLocation().y, robot.getHeading(), robot);
+      //print junction to error check
+        if (robotData.previouslyMarked(robot.getLocation().x, robot.getLocation().y) == false) {
+          System.out.println("Case random");
+          do {
+            direction = randomDirection(robot);
+            robot.setHeading(direction);
+          } while (robot.look(IRobot.AHEAD) != IRobot.PASSAGE);
+        } else {
+          direction = junction(robot);
+
+        }
+        robot.setHeading(direction);
+        direction = IRobot.AHEAD;
+        robotData.markHeadingOut(robot.getLocation().x, robot.getLocation().y, robot.getHeading());
+        robotData.printJunction();
+        if (robot.look(direction) == IRobot.BEENBEFORE) {
+          explorerMode = 0;
+        }
+    }
+    robot.face(direction);
+  }
+  public void backtrackControl(IRobot robot) {
+    byte exits = nonwallExits(robot);
+    int direction = IRobot.CENTRE;
+    if (exits > 2){
+      robotData.markHeadingIn(robot.getLocation().x, robot.getLocation().y, robot.getHeading());
+      direction = junction(robot);
+      robot.setHeading(direction);
+      robotData.markHeadingOut(robot.getLocation().x, robot.getLocation().y, robot.getHeading());
+      robotData.printJunction();
+      direction = IRobot.AHEAD;
+
+
+    } else if (exits == 2){
+        direction = corridor(robot);
+    } else {
+      direction = deadend(robot);
+    }
+    if (robot.look(direction) == IRobot.PASSAGE) {
+      explorerMode = 1;
+    }
+    robot.face(direction);
+  }
+  public void reset() {
+    //when reset is pressed reset stored junctions and make sure in explorer
+    robotData.resetJunctionCounter();
+    explorerMode = 1;
+  }
+  private byte nonwallExits(IRobot robot) {
+    byte nonwalls = 0;
+    //return every square around the robot that isn't a wall
+		for (int i = 0; i<4; i++) {
+			if (robot.look(IRobot.AHEAD+i) != IRobot.WALL)
+			nonwalls++;
+		}
+    return nonwalls;
+  }
+  private int deadend(IRobot robot){
+    //if the robot is at the first square set explorermode to 1 (at the first square sometimes exploererMode is set to 0 which is problematic for the program)
+    if (beenbeforeExits(robot) == 0){
+      explorerMode = 1;
+    }
+    //check every square around the robot and return the direction with no wall
+    for (int i = 0; i<4; i++) {
+			if (robot.look(IRobot.AHEAD+i) != IRobot.WALL){
+        return IRobot.AHEAD+i;
+      }
+    }
+    //it will never return 0, needed to compile
+    return 0;
+  }
+  private int corridor(IRobot robot){
+    //checks if robot is at a corner and what direction it must face and if not just go down corridor
+    if (robot.look(IRobot.AHEAD) == IRobot.WALL){
+      if (robot.look(IRobot.LEFT) == IRobot.WALL){
+        return IRobot.RIGHT;
+      } else {
+        return IRobot.LEFT;
+      }
+    } else {
+      return IRobot.AHEAD;
+    }
+  }
+  private int junction(IRobot robot){
+    int[] junctionHeadings = robotData.getJunctionMarks(robot.getLocation().x, robot.getLocation().y);
+      for (int i=0; i<4; i++) {
+        if (junctionHeadings[i] != 0) {
+          if (robotData.is2MarksBehind(robot.getLocation().x, robot.getLocation().y, robot.getHeading()) == false) {
+            //turn around
+            System.out.println("Case turn around");
+            switch(robot.getHeading()){
+              case IRobot.NORTH:
+              //robot.setHeading() as can't use absolute directions in robot.look()
+                return IRobot.SOUTH;
+              case IRobot.EAST:
+                return IRobot.WEST;
+              case IRobot.SOUTH:
+                return IRobot.NORTH;
+              case IRobot.WEST:
+                return IRobot.EAST;
+            }
+          } else {
+            //go in direction of lowest value
+            System.out.println("Case lowest");
+            System.out.println(junctionHeadings[0] + "" + junctionHeadings[1] + "" + junctionHeadings[2] + "" + junctionHeadings[3]);
+          if ((junctionHeadings[0] <= junctionHeadings[1]) && (junctionHeadings[0] <= junctionHeadings[2]) && (junctionHeadings[0] <= junctionHeadings[3])) {
+            return IRobot.NORTH;
+          }
+          if ((junctionHeadings[1] <= junctionHeadings[2]) && (junctionHeadings[1] <= junctionHeadings[3]) && (junctionHeadings[1] <= junctionHeadings[0])) {
+            return IRobot.EAST;
+          }
+          if ((junctionHeadings[2] <= junctionHeadings[3]) && (junctionHeadings[2] <= junctionHeadings[0]) && (junctionHeadings[2] <= junctionHeadings[1])) {
+            return IRobot.SOUTH;
+          }
+          if ((junctionHeadings[3] <= junctionHeadings[0]) && (junctionHeadings[3] <= junctionHeadings[1]) && (junctionHeadings[3] <= junctionHeadings[2])) {
+            return IRobot.WEST;
+          }
+            break;
+        }
+      }
+    }
+    System.out.println("BROKEN");
+    return 0;
+  }
+  private byte passageExits(IRobot robot){
+    byte passExits = 0;
+    //check every sqaure around robot and return number of passage squares
+		for (int i = 0; i<4; i++) {
+			if (robot.look(IRobot.AHEAD+i) == IRobot.PASSAGE)
+			passExits++;
+		}
+    return passExits;
+  }
+  private int randomDirection(IRobot robot){
+    int randno;
+    int direction;
+    //pick a random direction that is not a wall
+    do {
+				randno = (int) (Math.random()*4);
+				if (randno == 0){
+					direction = IRobot.NORTH;
+				} else if (randno == 1){
+					direction = IRobot.EAST;
+				} else if (randno == 2){
+					direction = IRobot.SOUTH;
+				} else {
+					direction = IRobot.WEST;
+				}
+        robot.setHeading(direction);
+	  } while (robot.look(IRobot.AHEAD) == IRobot.WALL);
+    return direction;
+  }
+  private byte beenbeforeExits(IRobot robot){
+    byte beenbeforeExits = 0;
+    //check every sqaure around robot and return number of beenbefore squares
+		for (int i = 0; i<4; i++) {
+			if (robot.look(IRobot.AHEAD+i) == IRobot.BEENBEFORE)
+			beenbeforeExits++;
+		}
+    return beenbeforeExits;
+  }
+}
+class RobotData3 {
+  private static int maxJunctions = 10000;
+  private static int junctionCounter;
+  //create an array of junctionRecorder objects with size 10000
+  private junctionRecorder3[] junctions = new junctionRecorder3 [maxJunctions];
+
+  public RobotData3() {
+    //constructor sets number of junctions to 0
+    junctionCounter = 0;
+  }
+
+  public void resetJunctionCounter() {
+    //needed when reset is pressed
+    junctionCounter = 0;
+  }
+  public void recordJunction(int XCoord, int YCoord, int heading, IRobot robot) {
+    //instantiate a new junctionRecorder object for every junction encountered
+    junctions[junctionCounter] = new junctionRecorder3(XCoord, YCoord, heading, robot);
+    //next increment for next junction
+    junctionCounter++;
+  }
+  public void printJunction() {
+    System.out.println("Junction " + junctionCounter + "X=" + junctions[junctionCounter-1].getjunctionX() + "Y=" + junctions[junctionCounter-1].getjunctionY() + " " + junctions[junctionCounter-1].getjunctionNorth() + junctions[junctionCounter-1].getjunctionEast() + junctions[junctionCounter-1].getjunctionSouth() + junctions[junctionCounter-1].getjunctionWest());
+  }
+  public junctionRecorder3 getCurrentJunction(int XCoord, int YCoord) {
+    for (int i = 0; i < junctions.length; i++) {
+      if (junctions[i].getjunctionX() == XCoord) {
+        if (junctions[i].getjunctionY() == YCoord) {
+          return junctions[i];
+        }
+      }
+    }
+    //never returned needed to compile.
+    return null;
+  }
+  public void markHeadingIn(int XCoord, int YCoord, int heading) {
+    junctionRecorder3 currentJunction = getCurrentJunction(XCoord, YCoord);
+    currentJunction.storeJunctionHeadingIn(heading);
+  }
+  public void markHeadingOut(int XCoord, int YCoord, int heading) {
+    junctionRecorder3 currentJunction = getCurrentJunction(XCoord, YCoord);
+    currentJunction.storeJunctionHeadingOut(heading);
+  }
+  public boolean is2MarksBehind(int XCoord, int YCoord, int heading) {
+    junctionRecorder3 currentJunction = getCurrentJunction(XCoord, YCoord);
+    switch(heading) {
+      case IRobot.SOUTH:
+        if (currentJunction.getjunctionNorth() == 2) {
+          return true;
+        }
+        break;
+      case IRobot.WEST:
+      if (currentJunction.getjunctionEast() == 2) {
+        return true;
+      }
+        break;
+      case IRobot.NORTH:
+      if (currentJunction.getjunctionSouth() == 2) {
+        return true;
+      }
+        break;
+      case IRobot.EAST:
+      if (currentJunction.getjunctionWest() == 2) {
+        return true;
+      }
+    }
+    return false;
+  }
+  public int[] getJunctionMarks(int XCoord, int YCoord) {
+    junctionRecorder3 currentJunction = getCurrentJunction(XCoord, YCoord);
+    int[] junctionMarks = {currentJunction.getjunctionNorth(), currentJunction.getjunctionEast(), currentJunction.getjunctionSouth(), currentJunction.getjunctionWest()};
+    return junctionMarks;
+  }
+  public boolean previouslyMarked(int XCoord, int YCoord) {
+    junctionRecorder3 currentJunction = getCurrentJunction(XCoord, YCoord);
+    return currentJunction.getpreviouslyMarked();
+  }
+}
+class junctionRecorder3 {
+  private int junctionX, junctionY, junctionNorth, junctionEast, junctionSouth, junctionWest;
+  private boolean previouslyMarked;
+  //only attributes needed to record for junctions
+  public junctionRecorder3(int XCoord, int YCoord, int heading, IRobot robot) {
+    junctionX = XCoord;
+    junctionY = YCoord;
+    robot.setHeading(IRobot.NORTH);
+    if (robot.look(IRobot.AHEAD) == IRobot.WALL) {
+      junctionNorth = 2;
+    } else {
+      junctionNorth = 0;
+    }
+    robot.setHeading(IRobot.EAST);
+    if (robot.look(IRobot.AHEAD) == IRobot.WALL) {
+      junctionEast = 2;
+    } else {
+      junctionEast = 0;
+    }
+    robot.setHeading(IRobot.SOUTH);
+    if (robot.look(IRobot.AHEAD) == IRobot.WALL) {
+      junctionSouth = 2;
+    } else {
+      junctionSouth = 0;
+    }
+    robot.setHeading(IRobot.WEST);
+    if (robot.look(IRobot.AHEAD) == IRobot.WALL) {
+      junctionWest = 2;
+    } else {
+      junctionWest = 0;
+    }
+    storeJunctionHeadingIn(heading);
+    previouslyMarked = false;
+  }
+  public void storeJunctionHeadingIn(int heading) {
+    switch(heading){
+      case IRobot.NORTH:
+        junctionSouth++;
+        break;
+      case IRobot.EAST:
+        junctionWest++;
+        break;
+      case IRobot.SOUTH:
+        junctionNorth++;
+        break;
+      case IRobot.WEST:
+        junctionEast++;
+    }
+  }
+  public void storeJunctionHeadingOut(int heading) {
+    switch(heading){
+      case IRobot.NORTH:
+        junctionNorth++;
+        break;
+      case IRobot.EAST:
+        junctionEast++;
+        break;
+      case IRobot.SOUTH:
+        junctionSouth++;
+        break;
+      case IRobot.WEST:
+        junctionWest++;
+    }
+    previouslyMarked = true;
+  }
+  //getters needed as attributes are private
+  public int getjunctionX() {
+    return junctionX;
+  }
+  public int getjunctionY() {
+    return junctionY;
+  }
+  public int getjunctionNorth() {
+    return junctionNorth;
+  }
+  public int getjunctionEast() {
+    return junctionEast;
+  }
+  public int getjunctionSouth() {
+    return junctionSouth;
+  }
+  public int getjunctionWest() {
+    return junctionWest;
+  }
+  public boolean getpreviouslyMarked() {
+    return previouslyMarked;
+  }
+}
+
+
+
+
+
+public void exploreControl(IRobot robot) {
+  byte exits = nonwallExits(robot);
+  int direction;
+  if (exits < 2){
+    explorerMode = 0;
+    robot.setHeading(deadend(robot, robot.getHeading()));
+    direction = IRobot.AHEAD;
+    //backtrack if at deadend
+
+  } else if (exits == 2){
+    direction = corridor(robot);
+  } else {
+      if (beenbeforeExits(robot) <= 1) {
+        //if at junction store the location of junction and heading of robot
+        robotData.recordJunction(robot.getLocation().x, robot.getLocation().y, robot.getHeading());
+        //print junction to error check
+        robotData.printJunction();
+        do {
+          direction = randomDirection(robot);
+        } while (robot.look(direction) != IRobot.PASSAGE);
+      } else {
+        explorerMode = 0;
+        robot.setHeading(deadend(robot, robot.getHeading()));
+        direction = IRobot.AHEAD;
+      }
+  }
+  System.out.println(explorerMode);
+  robot.face(direction);
+}
+public void backtrackControl(IRobot robot) {
+  byte exits = nonwallExits(robot);
+  int direction = IRobot.CENTRE;
+  if (exits > 2){
+    if (passageExits(robot) == 0) {
+      robot.setHeading(deadend(robot, robot.getHeading()));
+      direction = IRobot.AHEAD;
+    } else {
+      //if at junction with passage(s) change to exploring and pick any available passage
+      explorerMode = 1;
+      do {
+        direction = randomDirection(robot);
+      } while (robot.look(direction) != IRobot.PASSAGE);
+    }
+  } else if (exits == 2){
+      direction = corridor(robot);
+  } else {
+    robot.setHeading(deadend(robot, robot.getHeading()));
+    direction = IRobot.AHEAD;
+  }
+  System.out.println(explorerMode);
+  robot.face(direction);
+}
+
+private int deadend(IRobot robot, int heading){
+  //if the robot is at the first square set explorermode to 1 (at the first square sometimes exploererMode is set to 0 which is problematic for the program)
+  if (beenbeforeExits(robot) == 0){
+    explorerMode = 1;
+    return IRobot.AHEAD;
+  }
+  switch(heading){
+    case IRobot.NORTH:
+      return IRobot.SOUTH;
+    case IRobot.EAST:
+      return IRobot.WEST;
+    case IRobot.SOUTH:
+      return IRobot.NORTH;
+    case IRobot.WEST:
+     return IRobot.EAST;
+    default:
+      return 0;
+  }
+}
